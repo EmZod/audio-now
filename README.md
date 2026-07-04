@@ -1,5 +1,13 @@
 # audio-now
 
+![audio-now](assets/banner.svg)
+
+![Swift 6](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)
+![macOS 15+](https://img.shields.io/badge/macOS-15%2B-000000?logo=apple&logoColor=white)
+![Apple Silicon](https://img.shields.io/badge/Apple_Silicon-MLX-orange)
+![first sound](https://img.shields.io/badge/warm_TTFS-~0.4s-2ea44f)
+![license](https://img.shields.io/badge/license-MIT-blue)
+
 Local text-to-speech for coding agents on Apple Silicon. One command: `audio`.
 
 A 7B model (VibeVoice, via MLX) behind a small Swift daemon that starts itself
@@ -69,17 +77,19 @@ long-form output holds a 0.0000 noise floor.
 ## Install
 
 ```bash
-# 1. engine (sibling checkout) + one-time snapshot export (~5.4GB)
-git clone https://github.com/EmZod/vibevoice-mlx && cd vibevoice-mlx && uv sync
-uv run python -m vibevoice_mlx.export_snapshot   # writes ~/.audio-now/model
-
-# 2. daemon + CLI
-cd ../audio-now && make install                  # -> ~/.local/bin/audio
+git clone https://github.com/EmZod/audio-now && cd audio-now
+make setup          # engine clone + venv + one-time model snapshot + install
 audio say "hello"
 ```
 
-Requires macOS 15+, Apple Silicon, Swift 6 toolchain. Engine venv path lives
-in `~/.audio-now/config.json` if your layout differs. `skill/SKILL.md` is the
+`make setup` clones the [engine fork](https://github.com/EmZod/vibevoice-mlx)
+as a sibling checkout, syncs its venv, exports the quantized model snapshot
+(one-time: downloads the fp16 weights from Hugging Face, writes ~5.4GB to
+`~/.audio-now/model`), and installs `audio` to `~/.local/bin`.
+
+Requires macOS 15+, Apple Silicon, a Swift 6 toolchain, and
+[uv](https://docs.astral.sh/uv/). Engine venv path lives in
+`~/.audio-now/config.json` if your layout differs. `skill/SKILL.md` is the
 agent-facing usage guide — install it wherever your agent discovers skills.
 
 ## License
