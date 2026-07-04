@@ -31,9 +31,9 @@
   <text x="296" y="106" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace"
         font-size="56" font-weight="700" fill="#f2f5f8" letter-spacing="-1">audio-now</text>
   <text x="299" y="142" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace"
-        font-size="18" fill="#8fa0b3">local voice for coding agents</text>
+        font-size="18" fill="#c9d4df">startlingly human voice, fully local</text>
   <text x="299" y="168" font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace"
-        font-size="18" fill="#8fa0b3">warm in 0.4s · gone when idle</text>
+        font-size="18" fill="#8fa0b3">agent-first · warm in 0.4s</text>
 
   <!-- prompt chip -->
   <g font-family="ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace" font-size="16">

@@ -14,6 +14,10 @@ A 7B model (VibeVoice, via MLX) behind a small Swift daemon that starts itself
 on first use, answers in ~0.4s while warm, and after an hour of inactivity
 exits completely — zero processes, zero RAM. You never manage it.
 
+The voice is the point: startlingly human — expressive, natural pacing, real
+prosody. The most realistic fully-local TTS we've heard on a Mac, from someone
+who built two of the alternatives.
+
 Built agent-first: every verb returns machine-checkable evidence (measured
 seconds, time-to-first-sound, underrun counts, a wav path), every error names
 the fix, and nothing ever hangs a tool call.
