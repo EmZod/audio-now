@@ -131,7 +131,7 @@ Events (each line has `"event"`; job-scoped ones carry `"job"`):
 {"event":"started","job":"j-000042","voice":"maya"}
 {"event":"ttfa","job":"j-000042","ms":642}                                  // request-accept → first PCM frame
 {"event":"progress","job":"j-000042","generated_s":12.4,"played_s":10.1,"rtf":1.31}   // ~1 Hz
-{"event":"done","job":"j-000042","reason":"completed","wav":"/Users/jay/.audio-now/out/j-000042.wav",
+{"event":"done","job":"j-000042","reason":"completed","wav":"~/.audio-now/out/j-000042.wav",
  "duration_s":33.2,"underruns":0}                                           // reason: completed|stopped
 {"event":"stopped","jobs":["j-000042"],"queue_cleared":2}
 {"event":"idle"}                                                            // terminal for bare `wait`
