@@ -288,8 +288,9 @@ public actor Daemon {
             e.playedS = Double(engine.playedSamples - job.playedBaseline) / 24_000
             if unders > 0 && prebufferFrames < 2 {
                 prebufferFrames = 2
-                Log.warn("underruns detected — prebuffer escalated to 2 frames "
-                         + "for this daemon session")
+                Log.warn("underruns detected — initial prebuffer escalated to "
+                         + "2 frames for this daemon session (mid-stream "
+                         + "stalls rebuffer to 2s before resuming)")
             }
         }
         tellAudience(job, e)

@@ -62,7 +62,9 @@ audio CLI ── unix socket / NDJSON ──> daemon (same binary)
 Backpressure is the kernel pipe: the ring is bounded, so when playback lags,
 the worker's stdout write blocks and generation throttles to realtime — flat
 memory on unbounded jobs. The worker exits on stdin EOF, so a killed daemon
-can never leak a 6GB orphan.
+can never leak a 6GB orphan. The reverse direction is handled too: if
+generation dips below realtime (first job after a long idle, battery), a
+stall rebuffers ~2s before resuming — one clean pause, not rapid-fire gaps.
 
 ## Performance (measured, M1 Max)
 

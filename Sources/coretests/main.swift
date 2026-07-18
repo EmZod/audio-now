@@ -396,6 +396,69 @@ do {
     check(false, "pdf threw: \(error)")
 }
 
+// MARK: playback gate
+
+section("playback-gate")
+do {
+    let eng = PlaybackEngine()
+    let frame = PlaybackEngine.frameSamples
+    var buf = [Float](repeating: 0, count: frame)
+
+    func tick() {
+        buf.withUnsafeMutableBufferPointer { p in
+            eng.renderTickForTesting(into: p.baseAddress!, count: frame)
+        }
+    }
+    func feed(_ n: Int) {
+        let chunk = [Float](repeating: 0.25, count: n)
+        chunk.withUnsafeBufferPointer { p in
+            _ = eng.ring.write(p.baseAddress!, count: n)
+        }
+    }
+
+    eng.beginJob()
+    tick()
+    check(eng.playedSamples == 0, "filling: silent until initial prebuffer met")
+    feed(frame)
+    tick()
+    check(eng.playedSamples == frame, "1-frame prebuffer starts playback")
+
+    tick()                                   // ring empty mid-stream
+    check(eng.underrunCount == 1, "mid-stream stall counts one underrun")
+
+    feed(frame)
+    let before = eng.playedSamples
+    tick()
+    check(eng.playedSamples == before,
+          "one frame no longer resumes playback after a stall")
+    feed(PlaybackEngine.rebufferSamples - frame)
+    tick()
+    check(eng.playedSamples > before,
+          "playback resumes once the 2s rebuffer target is banked")
+    check(eng.underrunCount == 1, "the rebuffer hold adds no extra underruns")
+
+    while eng.playedSamples < before + PlaybackEngine.rebufferSamples { tick() }
+    tick()                                   // ring empty again
+    check(eng.underrunCount == 2, "second stall re-arms the rebuffer")
+    feed(frame)                              // below target — would hold…
+    let held = eng.playedSamples
+    tick()
+    check(eng.playedSamples == held, "still holding below the target")
+    eng.endOfStream()
+    tick()
+    check(eng.playedSamples == held + frame,
+          "eos overrides the hold and drains the tail")
+    tick()
+    check(eng.isDrained, "gate returns to idle after the eos drain")
+
+    eng.beginJob()
+    feed(frame)
+    tick()
+    check(eng.playedSamples == held + frame * 2,
+          "next job starts on the fast prebuffer again (target reset)")
+    eng.forceIdle()
+}
+
 // MARK: verdict
 
 if failures > 0 {

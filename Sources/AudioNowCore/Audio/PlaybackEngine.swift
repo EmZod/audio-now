@@ -14,6 +14,11 @@ final class RenderState: @unchecked Sendable {
     let underruns = Atomic<Int>(0)
     let played = Atomic<Int>(0)
     let prebuffer = Atomic<Int>(PlaybackEngine.frameSamples)
+    // Samples the filling state waits for before (re)starting playback.
+    // beginJob resets it to `prebuffer`; a mid-stream stall raises it to
+    // `rebufferSamples` so playback resumes with a real reserve instead of
+    // machine-gunning gap/audio/gap when generation runs below realtime.
+    let fillTarget = Atomic<Int>(PlaybackEngine.frameSamples)
 }
 
 /// Pull-model playback: AVAudioSourceNode's render block reads from the
@@ -25,6 +30,7 @@ public final class PlaybackEngine: @unchecked Sendable {
     public static let sampleRate = 24_000
     public static let frameSamples = 3_200
     public static let fadeSamples = 1_200          // 50ms
+    public static let rebufferSamples = 48_000     // 2s reserve after a stall
 
     private let engine = AVAudioEngine()
     private var source: AVAudioSourceNode!
@@ -39,46 +45,11 @@ public final class PlaybackEngine: @unchecked Sendable {
                                 sampleRate: Double(Self.sampleRate),
                                 channels: 1, interleaved: false)!
         let state = self.state              // sole capture: atomics + ring
-        let fadeLen = Self.fadeSamples
 
         source = AVAudioSourceNode(format: fmt) { _, _, frameCount, abl -> OSStatus in
             let out = UnsafeMutableAudioBufferListPointer(abl)[0].mData!
                 .assumingMemoryBound(to: Float.self)
-            let n = Int(frameCount)
-            memset(out, 0, n * 4)
-            switch state.gate.load(ordering: .acquiring) {
-            case 1 where state.ring.availableToRead
-                    >= state.prebuffer.load(ordering: .relaxed)
-                    || state.eos.load(ordering: .relaxed):
-                state.gate.store(2, ordering: .releasing)
-                fallthrough
-            case 2:
-                let got = state.ring.read(into: out, count: n)
-                state.played.wrappingAdd(got, ordering: .relaxed)
-                if got < n {
-                    if state.eos.load(ordering: .relaxed)
-                        && state.ring.availableToRead == 0 {
-                        state.gate.store(0, ordering: .releasing)   // natural end
-                    } else {
-                        state.underruns.wrappingAdd(1, ordering: .relaxed)
-                        state.gate.store(1, ordering: .releasing)   // rebuffer
-                    }
-                }
-            case 3:
-                let got = state.ring.read(into: out, count: n)
-                var f = state.fadeLeft.load(ordering: .relaxed)
-                for i in 0..<got {
-                    out[i] *= Float(max(f, 0)) / Float(fadeLen)
-                    f -= 1
-                }
-                state.fadeLeft.store(f, ordering: .relaxed)
-                if f <= 0 || got == 0 {
-                    state.ring.discardAllFromConsumer()
-                    state.gate.store(0, ordering: .releasing)
-                }
-            default:
-                break
-            }
+            PlaybackEngine.tick(state, out, Int(frameCount))
             return noErr
         }
         engine.attach(source)
@@ -90,6 +61,56 @@ public final class PlaybackEngine: @unchecked Sendable {
             object: engine, queue: nil) { [weak self] _ in
             self?.restartAfterDeviceChange()
         }
+    }
+
+    /// One render callback's worth of gate logic, factored out of the
+    /// AVAudioSourceNode closure so coretests can drive the FSM without an
+    /// audio device. Same real-time discipline as the closure: atomics and
+    /// the ring only, no locks, no allocation.
+    static func tick(_ state: RenderState,
+                     _ out: UnsafeMutablePointer<Float>, _ n: Int) {
+        memset(out, 0, n * 4)
+        switch state.gate.load(ordering: .acquiring) {
+        case 1 where state.ring.availableToRead
+                >= state.fillTarget.load(ordering: .relaxed)
+                || state.eos.load(ordering: .relaxed):
+            state.gate.store(2, ordering: .releasing)
+            fallthrough
+        case 2:
+            let got = state.ring.read(into: out, count: n)
+            state.played.wrappingAdd(got, ordering: .relaxed)
+            if got < n {
+                if state.eos.load(ordering: .relaxed)
+                    && state.ring.availableToRead == 0 {
+                    state.gate.store(0, ordering: .releasing)   // natural end
+                } else {
+                    state.underruns.wrappingAdd(1, ordering: .relaxed)
+                    state.fillTarget.store(rebufferSamples, ordering: .relaxed)
+                    state.gate.store(1, ordering: .releasing)   // rebuffer
+                }
+            }
+        case 3:
+            let got = state.ring.read(into: out, count: n)
+            var f = state.fadeLeft.load(ordering: .relaxed)
+            for i in 0..<got {
+                out[i] *= Float(max(f, 0)) / Float(fadeSamples)
+                f -= 1
+            }
+            state.fadeLeft.store(f, ordering: .relaxed)
+            if f <= 0 || got == 0 {
+                state.ring.discardAllFromConsumer()
+                state.gate.store(0, ordering: .releasing)
+            }
+        default:
+            break
+        }
+    }
+
+    /// Test hook: run one render callback synchronously (no device, no
+    /// real-time thread).
+    public func renderTickForTesting(into out: UnsafeMutablePointer<Float>,
+                                     count: Int) {
+        Self.tick(state, out, count)
     }
 
     /// Opens the device (once); the engine then stays running for the
@@ -104,6 +125,8 @@ public final class PlaybackEngine: @unchecked Sendable {
 
     public func beginJob() {
         state.eos.store(false, ordering: .relaxed)
+        state.fillTarget.store(state.prebuffer.load(ordering: .relaxed),
+                               ordering: .relaxed)
         state.gate.store(1, ordering: .releasing)
     }
 
